@@ -1,5 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
-module EDN.Types where
+module EDN.Types
+  ( EDNValue(..)
+  , ParseError(..)
+  ) where
 
 import Data.Text (Text)
 import Data.Time (UTCTime)

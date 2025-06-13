@@ -5,7 +5,6 @@ module EDN.Parser
   , ParseError(..)
   ) where
 
-import Control.Applicative ((<|>), many, some)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Read as TR
@@ -13,13 +12,14 @@ import Data.Scientific (Scientific)
 import qualified Data.Scientific as Sci
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Text.Parsec
+import Text.Parsec hiding (ParseError, (<|>), many)
 import Text.Parsec.Text
 import Text.Parsec.Char
+import Control.Applicative ((<|>), many)
 import Data.Time (UTCTime)
 import Data.Time.Format (parseTimeM, defaultTimeLocale)
 
-import EDN.Types
+import EDN.Types (EDNValue(..), ParseError(..))
 
 type EDNParser = Parsec Text ()
 

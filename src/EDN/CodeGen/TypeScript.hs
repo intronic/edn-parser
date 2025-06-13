@@ -6,7 +6,6 @@ module EDN.CodeGen.TypeScript
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import EDN.Types
 
 generateTypeScript :: Text
 generateTypeScript = T.unlines
