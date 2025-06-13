@@ -7,17 +7,11 @@ module EDN.Parser
 
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.Read as TR
-import Data.Scientific (Scientific)
 import qualified Data.Scientific as Sci
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Text.Parsec hiding (ParseError, (<|>), many)
-import Text.Parsec.Text
-import Text.Parsec.Char
 import Control.Applicative ((<|>), many)
-import Data.Time (UTCTime)
-import Data.Time.Format (parseTimeM, defaultTimeLocale)
 
 import EDN.Types (EDNValue(..), ParseError(..))
 
@@ -55,7 +49,7 @@ ednValue = whitespace *> choice
 
 ednNil :: EDNParser EDNValue
 ednNil = try $ do
-  string "nil"
+  _ <- string "nil"
   notFollowedBy (alphaNum <|> oneOf ".-_+*/?$%&=<>")
   return EDNNil
 
@@ -67,9 +61,9 @@ ednBool = try $ choice
 
 ednString :: EDNParser EDNValue
 ednString = do
-  char '"'
+  _ <- char '"'
   content <- many stringChar
-  char '"'
+  _ <- char '"'
   return $ EDNString $ T.pack content
   where
     stringChar = (char '\\' >> escapeChar) <|> noneOf "\"\\"
@@ -83,7 +77,7 @@ ednString = do
 
 ednChar :: EDNParser EDNValue
 ednChar = do
-  char '\\'
+  _ <- char '\\'
   c <- choice
     [ try (string "newline") >> return '\n'
     , try (string "return") >> return '\r'
@@ -126,7 +120,7 @@ ednNumber = do
 
 ednKeyword :: EDNParser EDNValue
 ednKeyword = do
-  char ':'
+  _ <- char ':'
   name <- many1 (alphaNum <|> oneOf ".-_+*/?$%&=<>")
   return $ EDNKeyword $ T.pack name
 
@@ -148,7 +142,7 @@ ednVector = between (char '[' <* whitespace) (whitespace *> char ']') $ do
 
 ednTaggedOrSet :: EDNParser EDNValue
 ednTaggedOrSet = do
-  char '#'
+  _ <- char '#'
   choice
     [ char '{' *> (ednSetBody >>= return . EDNSet . Set.fromList)
     , ednTaggedBody
@@ -158,7 +152,7 @@ ednTaggedOrSet = do
       whitespace
       vals <- many ednValue
       whitespace
-      char '}'
+      _ <- char '}'
       return vals
     
     ednTaggedBody = do

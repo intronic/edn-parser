@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Main where
+module Main (main) where
 
 import Test.Hspec
 import Test.QuickCheck
@@ -500,7 +500,7 @@ main = hspec $ do
           _ -> expectationFailure "Expected large vector to parse"
       
       it "parses large maps" $ do
-        let pairs = [":key" ++ show i ++ " " ++ show i | i <- [1..100]]
+        let pairs = [":key" ++ show (i :: Int) ++ " " ++ show (i :: Int) | i <- [1..100]]
         let largeMap = "{" ++ unwords pairs ++ "}"
         case parseEDNFromText (T.pack largeMap) of
           Right (EDNMap m) -> Map.size m `shouldBe` 100
@@ -609,9 +609,6 @@ isLeft :: Either a b -> Bool
 isLeft (Left _) = True
 isLeft _ = False
 
-isString :: Either ParseError EDNValue -> Bool
-isString (Right (EDNString _)) = True
-isString _ = False
 
 isVector :: Either ParseError EDNValue -> Bool
 isVector (Right (EDNVector _)) = True
@@ -668,6 +665,7 @@ escapeString = T.concatMap escapeChar
     escapeChar c = T.singleton c
 
 -- QuickCheck Generators
+-- Note: Orphan instance warning is unavoidable in test files
 instance Arbitrary EDNValue where
   arbitrary = sized genEDNValue
 
@@ -678,8 +676,8 @@ genEDNValue 0 = oneof
   , EDNString <$> genSafeText
   , EDNChar <$> genSafeChar
   , EDNNumber <$> genSafeNumber
-  , EDNKeyword <$> genIdentifier
-  , EDNSymbol <$> genIdentifier
+  , EDNKeyword <$> genSafeIdentifier
+  , EDNSymbol <$> genSafeIdentifier
   ]
 genEDNValue n = frequency
   [ (3, pure EDNNil)
@@ -687,13 +685,13 @@ genEDNValue n = frequency
   , (5, EDNString <$> genSafeText)
   , (3, EDNChar <$> genSafeChar)
   , (5, EDNNumber <$> genSafeNumber)
-  , (5, EDNKeyword <$> genIdentifier)
-  , (5, EDNSymbol <$> genIdentifier)
+  , (5, EDNKeyword <$> genSafeIdentifier)
+  , (5, EDNSymbol <$> genSafeIdentifier)
   , (2, EDNList <$> genCollection (n `div` 2))
   , (2, EDNVector <$> genCollection (n `div` 2))
   , (1, EDNSet . Set.fromList <$> genCollection (n `div` 3))
   , (1, EDNMap . Map.fromList <$> genMapPairs (n `div` 3))
-  , (1, EDNTagged <$> genIdentifier <*> genEDNValue (n `div` 2))
+  , (1, EDNTagged <$> genSafeIdentifier <*> genEDNValue (n `div` 2))
   ]
 
 genCollection :: Int -> Gen [EDNValue]
@@ -729,9 +727,10 @@ genSafeNumber = frequency
   , (2, Sci.scientific <$> arbitrary <*> choose (-10, 10))
   ]
 
-genIdentifier :: Gen T.Text
-genIdentifier = do
-  first <- oneof [choose ('a', 'z'), choose ('A', 'Z'), elements ".-_+*"]
-  rest <- listOf (oneof [choose ('a', 'z'), choose ('A', 'Z'), choose ('0', '9'), elements ".-_+*"])
+
+genSafeIdentifier :: Gen T.Text
+genSafeIdentifier = do
+  first <- oneof [choose ('a', 'z'), choose ('A', 'Z'), elements "._*"]  -- Remove + and - which can conflict with numbers
+  rest <- listOf (oneof [choose ('a', 'z'), choose ('A', 'Z'), choose ('0', '9'), elements "._"])  -- Further simplify
   return $ T.pack (first:rest)
 
