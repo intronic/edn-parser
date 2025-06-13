@@ -1,0 +1,53 @@
+cabal-version: 2.4
+name: edn-parser
+version: 0.1.0.0
+synopsis: EDN parser that generates JavaScript/TypeScript libraries
+description: A Haskell library that parses EDN (Extensible Data Notation) files from Clojure/Datomic and generates JavaScript/TypeScript parsing libraries
+license: MIT
+author: EDN Parser Team
+maintainer: team@example.com
+category: Language
+build-type: Simple
+
+common shared-properties
+  default-language: Haskell2010
+  ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
+
+library
+  import: shared-properties
+  exposed-modules:
+    EDN.Parser
+    EDN.Types
+    EDN.CodeGen.JavaScript
+    EDN.CodeGen.TypeScript
+  hs-source-dirs: src
+  build-depends:
+    base >= 4.14 && < 5,
+    text >= 1.2,
+    parsec >= 3.1,
+    containers >= 0.6,
+    scientific >= 0.3,
+    time >= 1.9,
+    bytestring >= 0.10,
+    aeson >= 2.0
+
+executable edn-codegen
+  import: shared-properties
+  main-is: Main.hs
+  hs-source-dirs: app
+  build-depends:
+    base,
+    edn-parser,
+    text,
+    optparse-applicative >= 0.16
+
+test-suite edn-parser-test
+  import: shared-properties
+  type: exitcode-stdio-1.0
+  main-is: Spec.hs
+  hs-source-dirs: test
+  build-depends:
+    base,
+    edn-parser,
+    hspec >= 2.7,
+    text

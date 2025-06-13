@@ -1,0 +1,52 @@
+;; Sample EDN file demonstrating various data types
+
+{:application "edn-parser-demo"
+ :version "1.0.0"
+ :metadata {:created #inst "2024-01-15T10:30:00.000Z"
+            :author "EDN Parser Team"
+            :tags #{:parser :edn :clojure :datomic}}
+ 
+ :users [{:id 1
+          :name "Alice Cooper"
+          :email "alice@example.com"
+          :active true
+          :roles #{:admin :user}
+          :profile {:bio "Software engineer with 5+ years experience"
+                   :skills [:clojure :haskell :javascript :typescript]
+                   :social {:github "alice-cooper"
+                           :twitter "@alice_codes"}}}
+         
+         {:id 2
+          :name "Bob Wilson"
+          :email "bob@example.com"
+          :active false
+          :roles #{:user}
+          :profile {:bio nil
+                   :skills [:java :python]
+                   :social {}}}]
+ 
+ :config {:database {:host "localhost"
+                    :port 5432
+                    :name "myapp"
+                    :ssl true}
+          
+          :cache {:ttl 300
+                 :max-size 1000
+                 :enabled true}
+          
+          :features #{:auth :logging :metrics :backup}}
+ 
+ :statistics {:total-requests 15847
+             :average-response-time 245.7
+             :uptime 99.9
+             :last-backup #inst "2024-01-14T02:00:00.000Z"}
+ 
+ :constants {:pi 3.141592653589793
+            :golden-ratio 1.618033988749895
+            :planck 6.62607015e-34}
+ 
+ :special-chars {\newline \space \tab}
+ 
+ :symbols [nil true false hello-world namespace/symbol]
+ 
+ :empty-collections [[] {} #{}]}
