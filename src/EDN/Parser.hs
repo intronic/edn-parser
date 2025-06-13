@@ -33,7 +33,7 @@ parseEDNFromText :: Text -> Either ParseError EDNValue
 parseEDNFromText = parseEDN "<input>"
 
 whitespace :: EDNParser ()
-whitespace = skipMany (space <|> comment)
+whitespace = skipMany (space <|> char ',' <|> comment)
 
 comment :: EDNParser Char
 comment = char ';' *> manyTill anyChar (try newline <|> (eof >> return '\n')) >> return ' '
@@ -44,22 +44,26 @@ ednValue = whitespace *> choice
   , ednBool
   , ednString
   , ednChar
-  , ednNumber
+  , try ednNumber
   , ednKeyword
-  , ednSymbol
   , ednList
   , ednVector
-  , ednSet
   , ednMap
-  , ednTagged
+  , ednTaggedOrSet
+  , ednSymbol
   ] <* whitespace
 
 ednNil :: EDNParser EDNValue
-ednNil = string "nil" >> return EDNNil
+ednNil = try $ do
+  string "nil"
+  notFollowedBy (alphaNum <|> oneOf ".-_+*/?$%&=<>")
+  return EDNNil
 
 ednBool :: EDNParser EDNValue
-ednBool = (string "true" >> return (EDNBool True))
-      <|> (string "false" >> return (EDNBool False))
+ednBool = try $ choice
+  [ string "true" >> notFollowedBy (alphaNum <|> oneOf ".-_+*/?$%&=<>") >> return (EDNBool True)
+  , string "false" >> notFollowedBy (alphaNum <|> oneOf ".-_+*/?$%&=<>") >> return (EDNBool False)
+  ]
 
 ednString :: EDNParser EDNValue
 ednString = do
@@ -91,9 +95,34 @@ ednChar = do
 
 ednNumber :: EDNParser EDNValue
 ednNumber = do
-  numStr <- many1 (digit <|> char '.' <|> char '-' <|> char '+' <|> char 'e' <|> char 'E')
-  case Sci.fromFloatDigits (read numStr :: Double) of
-    num -> return $ EDNNumber num
+  sign <- optionMaybe (char '+' <|> char '-')
+  intPart <- many1 digit
+  fracPart <- optionMaybe (char '.' *> many1 digit)
+  expPart <- optionMaybe $ do
+    _ <- char 'e' <|> char 'E'
+    expSign <- optionMaybe (char '+' <|> char '-')
+    expDigits <- many1 digit
+    return (expSign, expDigits)
+  
+  let signStr = maybe "" (:[]) sign
+      intStr = intPart
+      fracStr = maybe "" (\f -> "." ++ f) fracPart
+      expStr = case expPart of
+        Nothing -> ""
+        Just (expSign, expDigits) -> 
+          "e" ++ maybe "" (:[]) expSign ++ expDigits
+      numStr = signStr ++ intStr ++ fracStr ++ expStr
+  
+  case readMaybe numStr of
+    Just d -> return $ EDNNumber (Sci.fromFloatDigits d)
+    Nothing -> fail $ "Invalid number: " ++ numStr
+  where
+    readMaybe :: String -> Maybe Double
+    readMaybe s = 
+      let s' = if take 1 s == "+" then drop 1 s else s
+      in case reads s' of
+        [(x, "")] -> Just x
+        _ -> Nothing
 
 ednKeyword :: EDNParser EDNValue
 ednKeyword = do
@@ -117,14 +146,30 @@ ednVector = between (char '[' <* whitespace) (whitespace *> char ']') $ do
   vals <- many ednValue
   return $ EDNVector vals
 
-ednSet :: EDNParser EDNValue
-ednSet = do
-  string "#{"
-  whitespace
-  vals <- many ednValue
-  whitespace
-  char '}'
-  return $ EDNSet $ Set.fromList vals
+ednTaggedOrSet :: EDNParser EDNValue
+ednTaggedOrSet = do
+  char '#'
+  choice
+    [ char '{' *> (ednSetBody >>= return . EDNSet . Set.fromList)
+    , ednTaggedBody
+    ]
+  where
+    ednSetBody = do
+      whitespace
+      vals <- many ednValue
+      whitespace
+      char '}'
+      return vals
+    
+    ednTaggedBody = do
+      tag <- choice
+        [ try (string "inst") >> return "inst"
+        , try (string "uuid") >> return "uuid"
+        , many1 (alphaNum <|> oneOf ".-_")
+        ]
+      whitespace
+      val <- ednValue
+      return $ EDNTagged (T.pack tag) val
 
 ednMap :: EDNParser EDNValue
 ednMap = between (char '{' <* whitespace) (whitespace *> char '}') $ do
@@ -136,14 +181,3 @@ ednMap = between (char '{' <* whitespace) (whitespace *> char '}') $ do
       val <- ednValue
       return (key, val)
 
-ednTagged :: EDNParser EDNValue
-ednTagged = do
-  char '#'
-  tag <- choice
-    [ try (string "inst") >> return "inst"
-    , try (string "uuid") >> return "uuid"
-    , many1 (alphaNum <|> oneOf ".-_")
-    ]
-  whitespace
-  val <- ednValue
-  return $ EDNTagged (T.pack tag) val
