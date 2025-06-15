@@ -3,9 +3,9 @@ name: edn-parser
 version: 0.1.0.0
 synopsis: EDN parser that generates JavaScript/TypeScript libraries
 description: A Haskell library that parses EDN (Extensible Data Notation) files from Clojure/Datomic and generates JavaScript/TypeScript parsing libraries
-license: MIT
-author: EDN Parser Team
-maintainer: team@example.com
+license: AGPL-3.0-only
+author: Michael Pheasant
+maintainer: mike@pheasant.co.nz
 category: Language
 build-type: Simple
 
