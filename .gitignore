@@ -1,1 +1,6 @@
+# Generated code from edn-codegen
+edn-parser.js
+edn-parser.ts
+
+# Haskell build artifacts
 dist-newstyle/
