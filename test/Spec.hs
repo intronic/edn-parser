@@ -12,6 +12,8 @@ import qualified Data.Scientific as Sci
 
 import EDN.Parser
 import EDN.Types
+import Data.UUID (UUID)
+import Data.Time (UTCTime, addUTCTime)
 
 main :: IO ()
 main = hspec $ do
@@ -542,15 +544,15 @@ main = hspec $ do
       describe "Roundtrip properties" $ do
         it "parses what it serializes (simple values)" $ property $ \val ->
           if containsTaggedValues val
-            then True  -- FIXME: Skip any structures containing tagged values
-            else case parseEDNFromText (toEDNText val) of
+            then True  -- Skip non-standard tagged values
+            else case parseEDNWithReaders (toEDNText val) of
               Right parsed -> parsed == val
               Left _ -> False
 
         it "serializer produces valid EDN syntax" $ property $ \val ->
           if containsTaggedValues val
-            then True  -- FIXME: Skip any structures containing tagged values
-            else case parseEDNFromText (toEDNText val) of
+            then True  -- Skip non-standard tagged values
+            else case parseEDNWithReaders (toEDNText val) of
               Right _ -> True
               Left _ -> False
 
@@ -597,6 +599,46 @@ main = hspec $ do
         it "rejects empty input" $ 
           isLeft (parseEDNFromText "") `shouldBe` True
 
+    describe "Reader macro tests" $ do
+      describe "Standard tagged literals" $ do
+        it "parses #inst tagged literals with readers" $ do
+          case parseEDNWithReaders "#inst \"2023-01-01T10:30:00Z\"" of
+            Right (EDNInstant _) -> return ()
+            _ -> expectationFailure "Expected EDNInstant"
+        
+        it "parses #uuid tagged literals with readers" $ do
+          case parseEDNWithReaders "#uuid \"550e8400-e29b-41d4-a716-446655440000\"" of
+            Right (EDNUuid _) -> return ()
+            _ -> expectationFailure "Expected EDNUuid"
+        
+        it "roundtrips #inst values correctly" $ do
+          let input = "#inst \"2023-01-01T10:30:00Z\""
+          case parseEDNWithReaders input of
+            Right val -> T.unpack (toEDNText val) `shouldContain` "#inst"
+            Left err -> expectationFailure $ "Parse error: " ++ show err
+        
+        it "roundtrips #uuid values correctly" $ do
+          let input = "#uuid \"550e8400-e29b-41d4-a716-446655440000\""
+          case parseEDNWithReaders input of
+            Right val -> T.unpack (toEDNText val) `shouldContain` "#uuid"
+            Left err -> expectationFailure $ "Parse error: " ++ show err
+      
+      describe "Reader error handling" $ do
+        it "rejects invalid #inst format" $ do
+          case parseEDNWithReaders "#inst \"not-a-date\"" of
+            Left _ -> return ()
+            Right _ -> expectationFailure "Expected parse error for invalid instant"
+        
+        it "rejects invalid #uuid format" $ do
+          case parseEDNWithReaders "#uuid \"not-a-uuid\"" of
+            Left _ -> return ()
+            Right _ -> expectationFailure "Expected parse error for invalid UUID"
+        
+        it "handles unknown tagged literals" $ do
+          case parseEDNWithReaders "#custom \"value\"" of
+            Right (EDNTagged "custom" (EDNString "value")) -> return ()
+            _ -> expectationFailure "Expected raw tagged literal for unknown tag"
+
 isVectorWithThreeNumbers :: Either ParseError EDNValue -> Bool
 isVectorWithThreeNumbers (Right (EDNVector [EDNNumber _, EDNNumber _, EDNNumber _])) = True
 isVectorWithThreeNumbers _ = False
@@ -626,43 +668,14 @@ isSet :: Either ParseError EDNValue -> Bool
 isSet (Right (EDNSet _)) = True
 isSet _ = False
 
--- Helper function to check if an EDN value contains tagged values
+-- Helper function to check if an EDN value contains tagged values (non-standard)
 containsTaggedValues :: EDNValue -> Bool
-containsTaggedValues (EDNTagged _ _) = True
-containsTaggedValues (EDNInstant _) = True
-containsTaggedValues (EDNUuid _) = True
+containsTaggedValues (EDNTagged _ _) = True  -- Only non-standard tagged values
 containsTaggedValues (EDNList vals) = any containsTaggedValues vals
 containsTaggedValues (EDNVector vals) = any containsTaggedValues vals
 containsTaggedValues (EDNSet s) = any containsTaggedValues (Set.toList s)
 containsTaggedValues (EDNMap m) = any (\(k,v) -> containsTaggedValues k || containsTaggedValues v) (Map.toList m)
-containsTaggedValues _ = False
-
--- EDN Serializer for roundtrip testing
-toEDNText :: EDNValue -> T.Text
-toEDNText EDNNil = "nil"
-toEDNText (EDNBool True) = "true"
-toEDNText (EDNBool False) = "false"
-toEDNText (EDNString s) = "\"" <> escapeString s <> "\""
-toEDNText (EDNChar c) = "\\" <> T.singleton c
-toEDNText (EDNNumber n) = T.pack (show n)
-toEDNText (EDNKeyword k) = ":" <> k
-toEDNText (EDNSymbol s) = s
-toEDNText (EDNList vals) = "(" <> T.unwords (map toEDNText vals) <> ")"
-toEDNText (EDNVector vals) = "[" <> T.unwords (map toEDNText vals) <> "]"
-toEDNText (EDNSet s) = "#{" <> T.unwords (map toEDNText (Set.toList s)) <> "}"
-toEDNText (EDNMap m) = "{" <> T.unwords (concatMap (\(k,v) -> [toEDNText k, toEDNText v]) (Map.toList m)) <> "}"
-toEDNText (EDNTagged tag val) = "#" <> tag <> " " <> toEDNText val
-toEDNText _ = error "Unsupported EDN value for serialization"
-
-escapeString :: T.Text -> T.Text
-escapeString = T.concatMap escapeChar
-  where
-    escapeChar '"' = "\\\""
-    escapeChar '\\' = "\\\\"
-    escapeChar '\n' = "\\n"
-    escapeChar '\t' = "\\t"
-    escapeChar '\r' = "\\r"
-    escapeChar c = T.singleton c
+containsTaggedValues _ = False  -- EDNInstant and EDNUuid are now standard and handled properly
 
 -- QuickCheck Generators
 -- Note: Orphan instance warning is unavoidable in test files
@@ -678,6 +691,8 @@ genEDNValue 0 = oneof
   , EDNNumber <$> genSafeNumber
   , EDNKeyword <$> genSafeIdentifier
   , EDNSymbol <$> genSafeIdentifier
+  , EDNInstant <$> genSafeTime
+  , EDNUuid <$> genSafeUUID
   ]
 genEDNValue n = frequency
   [ (3, pure EDNNil)
@@ -687,6 +702,8 @@ genEDNValue n = frequency
   , (5, EDNNumber <$> genSafeNumber)
   , (5, EDNKeyword <$> genSafeIdentifier)
   , (5, EDNSymbol <$> genSafeIdentifier)
+  , (2, EDNInstant <$> genSafeTime)
+  , (2, EDNUuid <$> genSafeUUID)
   , (2, EDNList <$> genCollection (n `div` 2))
   , (2, EDNVector <$> genCollection (n `div` 2))
   , (1, EDNSet . Set.fromList <$> genCollection (n `div` 3))
@@ -733,4 +750,24 @@ genSafeIdentifier = do
   first <- oneof [choose ('a', 'z'), choose ('A', 'Z'), elements "._*"]  -- Remove + and - which can conflict with numbers
   rest <- listOf (oneof [choose ('a', 'z'), choose ('A', 'Z'), choose ('0', '9'), elements "._"])  -- Further simplify
   return $ T.pack (first:rest)
+
+genSafeTime :: Gen UTCTime
+genSafeTime = do
+  -- Generate reasonable timestamps (between 1970 and 2030)
+  secondsSinceEpoch <- choose (0, 1893456000)  -- 2030-01-01
+  return $ posixSecondsToUTCTime (fromInteger secondsSinceEpoch)
+  where
+    posixSecondsToUTCTime :: Integer -> UTCTime
+    posixSecondsToUTCTime s = addUTCTime (fromInteger s) (read "1970-01-01 00:00:00 UTC")
+
+genSafeUUID :: Gen UUID
+genSafeUUID = elements predefinedUUIDs
+  where
+    predefinedUUIDs = 
+      [ read "550e8400-e29b-41d4-a716-446655440000"
+      , read "f47ac10b-58cc-4372-a567-0e02b2c3d479"  
+      , read "123e4567-e89b-12d3-a456-426614174000"
+      , read "00000000-0000-0000-0000-000000000000"
+      , read "ffffffff-ffff-ffff-ffff-ffffffffffff"
+      ]
 

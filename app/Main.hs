@@ -1,7 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Main where
-
-import qualified Data.Text as T
+module Main (main) where
 import qualified Data.Text.IO as TIO
 import Options.Applicative
 import System.IO (stdout)

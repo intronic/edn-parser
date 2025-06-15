@@ -2,6 +2,8 @@
 module EDN.Parser
   ( parseEDN
   , parseEDNFromText
+  , parseEDNWithReaders
+  , parseEDNWithCustomReaders
   , ParseError(..)
   ) where
 
@@ -13,7 +15,7 @@ import qualified Data.Set as Set
 import Text.Parsec hiding (ParseError, (<|>), many)
 import Control.Applicative ((<|>), many)
 
-import EDN.Types (EDNValue(..), ParseError(..))
+import EDN.Types (EDNValue(..), ParseError(..), ReaderRegistry, ReaderError(..), defaultReaders, applyReaders)
 
 type EDNParser = Parsec Text ()
 
@@ -25,6 +27,18 @@ parseEDN filename input =
 
 parseEDNFromText :: Text -> Either ParseError EDNValue
 parseEDNFromText = parseEDN "<input>"
+
+-- | Parse EDN with reader macros applied using default readers
+parseEDNWithReaders :: Text -> Either ParseError EDNValue
+parseEDNWithReaders = parseEDNWithCustomReaders defaultReaders
+
+-- | Parse EDN with custom reader registry
+parseEDNWithCustomReaders :: ReaderRegistry -> Text -> Either ParseError EDNValue
+parseEDNWithCustomReaders readers input = do
+  raw <- parseEDNFromText input
+  case applyReaders readers raw of
+    Left (ReaderError msg tag) -> Left $ ParseError ("Reader error for tag #" <> tag <> ": " <> msg) 0
+    Right result -> Right result
 
 whitespace :: EDNParser ()
 whitespace = skipMany (space <|> char ',' <|> comment)
